@@ -60,7 +60,7 @@ static struct schema_info {
 		"EQUALITY generalizedTimeMatch "
 		"ORDERING generalizedTimeOrderingMatch "
 		"SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 "
-		"SINGLE-VALUE NO-USER-MODIFICATION USAGE dsaOperation )",
+		"SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )",
 		&ad_authTimestamp},
 	{ NULL, NULL }
 };
@@ -173,14 +173,30 @@ done:
 		Operation op2 = *op;
 		SlapReply r2 = { REP_RESULT };
 		slap_callback cb = { NULL, slap_null_cb, NULL, NULL };
+		LDAPControl c, *ca[2];
 
-		/* This is a DSA-specific opattr, it never gets replicated. */
 		op2.o_tag = LDAP_REQ_MODIFY;
 		op2.o_callback = &cb;
 		op2.orm_modlist = mod;
+		op2.orm_no_opattrs = 0;
 		op2.o_dn = op->o_bd->be_rootdn;
 		op2.o_ndn = op->o_bd->be_rootndn;
-		op2.o_dont_replicate = 1;
+
+		/* we are going to use the frontend always, so we can replicate
+		 * if needed */
+		// op2.o_bd = frontendDB;
+
+		/* since this is a NO-USER-MODIFICATION attribute, we have to use
+		 * the Relax control */
+		op2.o_relax = SLAP_CONTROL_CRITICAL;
+		op2.o_ctrls = ca;
+		ca[0] = &c;
+		ca[1] = NULL;
+		BER_BVZERO( &c.ldctl_value );
+		c.ldctl_iscritical = 1;
+		c.ldctl_oid = LDAP_CONTROL_RELAX;
+
+
 		rc = op->o_bd->be_modify( &op2, &r2 );
 		slap_mods_free( mod, 1 );
 	}
